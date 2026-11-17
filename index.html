@@ -1,0 +1,130 @@
+<!-- ... existing code ... -->
+</head>
+<body class="bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-100 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 text-slate-800">
+
+    <!-- 상단 유틸리티 위젯 바 (날씨, 시계, 달력) -->
+    <section class="w-full max-w-lg mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <!-- 1. 실시간 시계 -->
+        <div class="bg-white/90 backdrop-blur-md rounded-2xl p-3.5 shadow-sm border border-amber-100/80 flex items-center justify-between sm:flex-col sm:items-start sm:justify-center">
+            <div class="flex items-center gap-1.5 text-amber-600 text-xs font-bold mb-0 sm:mb-1">
+                <i class="fa-regular fa-clock"></i>
+                <span>현재 시각</span>
+            </div>
+            <div id="clock-display" class="text-base sm:text-lg font-bold text-slate-800 tracking-tight tabular-nums">
+                00:00:00
+            </div>
+        </div>
+
+        <!-- 2. 달력 (오늘 날짜 & 요일) -->
+        <div class="bg-white/90 backdrop-blur-md rounded-2xl p-3.5 shadow-sm border border-amber-100/80 flex items-center justify-between sm:flex-col sm:items-start sm:justify-center">
+            <div class="flex items-center gap-1.5 text-orange-600 text-xs font-bold mb-0 sm:mb-1">
+                <i class="fa-regular fa-calendar"></i>
+                <span>오늘 날짜</span>
+            </div>
+            <div id="calendar-display" class="text-sm sm:text-base font-bold text-slate-800 tracking-tight">
+                불러오는 중...
+            </div>
+        </div>
+
+        <!-- 3. 실시간 날씨 (Open-Meteo API 연동) -->
+        <div class="bg-white/90 backdrop-blur-md rounded-2xl p-3.5 shadow-sm border border-amber-100/80 flex items-center justify-between sm:flex-col sm:items-start sm:justify-center">
+            <div class="flex items-center gap-1.5 text-sky-600 text-xs font-bold mb-0 sm:mb-1">
+                <i id="weather-icon" class="fa-solid fa-sun"></i>
+                <span id="weather-location">현재 날씨</span>
+            </div>
+            <div id="weather-display" class="text-sm sm:text-base font-bold text-slate-800 tracking-tight">
+                확인 중...
+            </div>
+        </div>
+    </section>
+
+    <!-- 메인 컨테이너 카드 -->
+    <main class="w-full max-w-lg bg-white rounded-3xl shadow-xl overflow-hidden border border-amber-100 transition-all duration-300">
+<!-- ... existing code ... -->
+        // 현재 표시된 이미지 URL 저장 변수
+        let currentImageUrl = '';
+
+        /**
+         * 상단 시계 및 달력(날짜) 실시간 업데이트 함수
+         */
+        function updateDateTime() {
+            const now = new Date();
+
+            // 1. 시계 포맷팅 (오전/오후 시:분:초)
+            const timeString = now.toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            document.getElementById('clock-display').textContent = timeString;
+
+            // 2. 달력 포맷팅 (예: 11월 17일 (화))
+            const month = now.getMonth() + 1;
+            const date = now.getDate();
+            const days = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayName = days[now.getDay()];
+            document.getElementById('calendar-display').textContent = `${month}월 ${date}일 (${dayName})`;
+        }
+
+        /**
+         * Open-Meteo 무료 날씨 API를 활용한 현재 날씨 조회 함수
+         * 위치 권한 허용 시 현재 위치, 거부/미지원 시 서울 기준 날씨 표시
+         */
+        async function fetchWeather() {
+            const weatherDisplay = document.getElementById('weather-display');
+            const weatherLocation = document.getElementById('weather-location');
+            const weatherIcon = document.getElementById('weather-icon');
+
+            // WMO 날씨 코드를 아이콘과 한글 설명으로 변환
+            function parseWeatherCode(code) {
+                if (code === 0) return { text: '맑음', icon: 'fa-sun text-amber-500' };
+                if (code >= 1 && code <= 3) return { text: '구름 조금', icon: 'fa-cloud-sun text-amber-400' };
+                if (code >= 45 && code <= 48) return { text: '안개', icon: 'fa-smog text-slate-400' };
+                if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { text: '비', icon: 'fa-cloud-rain text-sky-500' };
+                if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return { text: '눈', icon: 'fa-snowflake text-sky-300' };
+                if (code >= 95) return { text: '뇌우', icon: 'fa-cloud-bolt text-indigo-500' };
+                return { text: '흐림', icon: 'fa-cloud text-slate-400' };
+            }
+
+            async function getWeatherByCoords(lat, lon, locName) {
+                try {
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+                    const data = await res.json();
+                    if (data && data.current_weather) {
+                        const temp = Math.round(data.current_weather.temperature);
+                        const info = parseWeatherCode(data.current_weather.weathercode);
+                        weatherLocation.textContent = locName;
+                        weatherDisplay.textContent = `${temp}°C · ${info.text}`;
+                        weatherIcon.className = `fa-solid ${info.icon}`;
+                    }
+                } catch (err) {
+                    weatherDisplay.textContent = '날씨 정보 없음';
+                }
+            }
+
+            // 브라우저 위치 정보 확인 (기본값: 서울 시청 좌표)
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => getWeatherByCoords(pos.coords.latitude, pos.coords.longitude, '내 위치 날씨'),
+                    () => getWeatherByCoords(37.5665, 126.9780, '서울 날씨'),
+                    { timeout: 5000 }
+                );
+            } else {
+                getWeatherByCoords(37.5665, 126.9780, '서울 날씨');
+            }
+        }
+
+        /**
+         * 이미지 URL에서 견종 이름을 추출하여 읽기 좋게 포맷팅하는 함수
+<!-- ... existing code ... -->
+        // 페이지 로드 시 첫 번째 강아지 사진, 시계/달력, 날씨 초기화
+        window.addEventListener('DOMContentLoaded', () => {
+            updateDateTime();
+            setInterval(updateDateTime, 1000); // 1초마다 시계 갱신
+            fetchWeather();
+            fetchRandomDog();
+        });
+    </script>
+</body>
+</html>
